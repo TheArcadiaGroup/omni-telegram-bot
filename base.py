@@ -18,7 +18,7 @@ TELEGRAM_TOKEN = os.getenv('TG_TOKEN')  # Replace with your Telegram bot token
 CHAT_ID = -4250910125  # Replace with your Telegram chat ID
 START_BLOCK = 14113742  # Block number to start monitoring from
 POLL_INTERVAL = 10  # Polling interval in seconds
-BLOCK_CHUNK_SIZE = 10000  # Number of blocks to query at a time
+BLOCK_CHUNK_SIZE = 5000  # Number of blocks to query at a time
 
 # Load ABI from api.json file
 with open('api.json') as f:
@@ -40,10 +40,11 @@ logger = logging.getLogger(__name__)
 
 async def send_telegram_message(message):
     try:
-        await bot.send_message(chat_id=CHAT_ID, text=message)
+        await bot.send_message(chat_id=CHAT_ID, text=message, parse_mode='Markdown')
         logger.info(f"Sent message: {message}")
     except TelegramError as e:
         logger.error(f"Failed to send message: {e}")
+    await asyncio.sleep(5)  # Add a 5-second delay after sending the message
 
 def handle_event(event):
     # Parse event data
@@ -52,15 +53,15 @@ def handle_event(event):
     symbol = event["args"]["symbol"]
     total_supply = event["args"]["totalSupply"]
 
-    # Format message
-    message = (f"New Token Created:\n"
+    # Format message with a link to the contract address on basescan.com
+    message = (f"New Base Token Created:\n"
                f"Name: {name}\n"
                f"Symbol: {symbol}\n"
                f"Total Supply: {total_supply}\n"
-               f"Address: {token_address}")
+               f"Address: [{token_address}](https://basescan.org/address/{token_address})")
 
-    # Send message via Telegram
-    asyncio.run(send_telegram_message(message))
+    # Schedule message sending via Telegram
+    asyncio.create_task(send_telegram_message(message))
 
 def get_event_logs(from_block, to_block):
     event_signature_hash = web3.keccak(text="TokenCreated(address,string,string,uint256)").hex()
@@ -72,7 +73,7 @@ def get_event_logs(from_block, to_block):
     })
     return logs
 
-def log_loop(poll_interval):
+async def log_loop(poll_interval):
     latest_block = web3.eth.block_number
     current_block = START_BLOCK
 
@@ -89,13 +90,13 @@ def log_loop(poll_interval):
                     handle_event(event)
                 current_block = end_block + 1
 
-            time.sleep(poll_interval)
+            await asyncio.sleep(poll_interval)
         except Exception as e:
             logger.error(f"Error fetching logs: {e}")
-            time.sleep(poll_interval)
+            await asyncio.sleep(poll_interval)
 
 def main():
-    log_loop(POLL_INTERVAL)
+    asyncio.run(log_loop(POLL_INTERVAL))
 
 if __name__ == "__main__":
     main()
